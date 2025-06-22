@@ -65,19 +65,19 @@ async function main() {
 
   rl.close();
 
-  // Expand date range to catch late-night sleep
-  // If collecting Week 25 (June 15-21), fetch June 14-22
+  // Fetch Oura dates for Night of dates
+  // Week 25 nights (June 15-21) = Oura dates (June 16-22)
   const fetchStart = new Date(weekStart);
-  fetchStart.setDate(fetchStart.getDate() - 1);
+  fetchStart.setDate(fetchStart.getDate() + 1); // Oura day = Night of + 1
   const fetchEnd = new Date(weekEnd);
-  fetchEnd.setDate(fetchEnd.getDate() + 1);
+  fetchEnd.setDate(fetchEnd.getDate() + 2); // End + 1 for Oura day + 1 buffer
 
   // Convert dates to YYYY-MM-DD format for Oura API
   const startDate = fetchStart.toISOString().split("T")[0];
   const endDate = fetchEnd.toISOString().split("T")[0];
 
   console.log(
-    `🔄 Fetching data from ${startDate} to ${endDate} (expanded range)`
+    `🔄 Fetching Oura dates ${startDate} to ${endDate} for Night of ${weekStart.toDateString()} - ${weekEnd.toDateString()}`
   );
 
   // Fetch sleep sessions from Oura
@@ -97,15 +97,10 @@ async function main() {
       // Let Notion client handle the Night of Date calculation
       const transformedData = notion.transformSleepToNotion(session);
 
-      // Check if this sleep belongs to our target week
-      const nightOfDate = new Date(transformedData["Night of Date"].date.start);
-      if (nightOfDate < weekStart || nightOfDate > weekEnd) {
-        console.log(
-          `⏭️  Skipping ${transformedData["Night of"].title[0].text.content} (outside target week)`
-        );
-        skippedCount++;
-        continue;
-      }
+      // We already fetched the right Oura dates, so process all sessions
+      console.log(
+        `✅ Processing Night of ${transformedData["Night of"].title[0].text.content} from Oura Date ${session.day}`
+      );
 
       await notion.createSleepRecord(session);
       savedCount++;
