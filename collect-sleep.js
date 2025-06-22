@@ -24,18 +24,6 @@ function askQuestion(question) {
   });
 }
 
-function calculateSleepDate(bedtimeStart) {
-  const bedtime = new Date(bedtimeStart);
-  const sleepDate = new Date(bedtimeStart);
-
-  // If bedtime is before 6 AM, this sleep belongs to the previous day
-  if (bedtime.getHours() < 6) {
-    sleepDate.setDate(sleepDate.getDate() - 1);
-  }
-
-  return sleepDate.toISOString().split("T")[0]; // Return YYYY-MM-DD format
-}
-
 async function main() {
   console.log("😴 Oura Sleep Collector 2025\n");
 
@@ -53,7 +41,7 @@ async function main() {
   const weeks = generateWeekOptions(2025);
 
   // Show first few weeks as examples
-  weeks.slice(0, 5).forEach((week, index) => {
+  weeks.slice(0, 5).forEach((week) => {
     console.log(`  ${week.value} - ${week.label}`);
   });
   console.log("  ...");
@@ -77,82 +65,57 @@ async function main() {
 
   rl.close();
 
+  // Expand date range to catch late-night sleep
+  // If collecting Week 25 (June 15-21), fetch June 14-22
+  const fetchStart = new Date(weekStart);
+  fetchStart.setDate(fetchStart.getDate() - 1);
+  const fetchEnd = new Date(weekEnd);
+  fetchEnd.setDate(fetchEnd.getDate() + 1);
+
   // Convert dates to YYYY-MM-DD format for Oura API
-  const startDate = weekStart.toISOString().split("T")[0];
-  // Add one day to end date to catch late Saturday night sessions
-  const extendedEnd = new Date(weekEnd);
-  extendedEnd.setDate(extendedEnd.getDate() + 1);
-  const endDate = extendedEnd.toISOString().split("T")[0];
+  const startDate = fetchStart.toISOString().split("T")[0];
+  const endDate = fetchEnd.toISOString().split("T")[0];
 
-  // Fetch both sleep sessions and daily sleep data
-  console.log("🔄 Fetching sleep data from Oura...");
-  const [sleepSessions, dailySleep] = await Promise.all([
-    oura.getSleepSessions(startDate, endDate),
-    oura.getDailySleep(startDate, endDate),
-  ]);
-
-  // Filter for only long sleep sessions (main nighttime sleep)
-  const longSleepSessions = sleepSessions.filter(
-    (session) => session.type === "long_sleep"
+  console.log(
+    `🔄 Fetching data from ${startDate} to ${endDate} (expanded range)`
   );
 
-  // Further filter to only include sessions that belong to this week
-  const weekSleepSessions = longSleepSessions.filter((session) => {
-    const calculatedSleepDate = calculateSleepDate(session.bedtime_start);
-    const sleepDateObj = new Date(calculatedSleepDate);
-    return sleepDateObj >= weekStart && sleepDateObj <= weekEnd;
-  });
+  // Fetch sleep sessions from Oura
+  const sleepSessions = await oura.getSleepSessions(startDate, endDate);
 
-  if (weekSleepSessions.length === 0) {
+  if (sleepSessions.length === 0) {
     console.log("📭 No sleep sessions found for this week");
     return;
   }
 
-  // Create a map of sleep scores by day
-  const scoreMap = {};
-  dailySleep.forEach((d) => (scoreMap[d.day] = d.score));
-
-  console.log(
-    `\n😴 Processing ${weekSleepSessions.length} sleep sessions for week ${weekNumber}:`
-  );
+  console.log("\n😴 Processing sleep sessions:");
   let savedCount = 0;
+  let skippedCount = 0;
 
-  for (const session of weekSleepSessions) {
+  for (const session of sleepSessions) {
     try {
-      // Calculate which day this sleep belongs to
-      const calculatedSleepDate = calculateSleepDate(session.bedtime_start);
+      // Let Notion client handle the Night of Date calculation
+      const transformedData = notion.transformSleepToNotion(session);
 
-      // Determine wake category based on wake time
-      const wakeTime = new Date(session.bedtime_end);
-      const wakeHour = wakeTime.getHours();
-      const wakeCategory = wakeHour < 7 ? "Early Bird" : "Sleep In";
+      // Check if this sleep belongs to our target week
+      const nightOfDate = new Date(transformedData["Night of Date"].date.start);
+      if (nightOfDate < weekStart || nightOfDate > weekEnd) {
+        console.log(
+          `⏭️  Skipping ${transformedData["Night of"].title[0].text.content} (outside target week)`
+        );
+        skippedCount++;
+        continue;
+      }
 
-      // Combine session data with score
-      const sleepRecord = {
-        ...session,
-        sleepScore: scoreMap[session.day] || null,
-        wakeCategory: wakeCategory,
-        calculatedSleepDate: calculatedSleepDate,
-        // Add calculated fields
-        sleepDurationHours: (session.total_sleep_duration / 3600).toFixed(1),
-        // Convert timestamps to readable format
-        bedtimeFormatted: new Date(session.bedtime_start).toLocaleString(),
-        wakeTimeFormatted: new Date(session.bedtime_end).toLocaleString(),
-      };
-
-      await notion.createSleepRecord(sleepRecord);
+      await notion.createSleepRecord(session);
       savedCount++;
 
-      const category =
-        wakeCategory === "Early Bird" ? "☀️ Early Bird" : "🛌 Sleep In";
-      const bedtime = new Date(session.bedtime_start);
-      const bedtimeStr = bedtime.toLocaleString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
+      const duration = transformedData["Sleep Duration"].number;
+      const efficiency = session.efficiency;
+      const calendar = transformedData["Google Calendar"].select.name;
+
       console.log(
-        `✅ Saved ${calculatedSleepDate}: Bed ${bedtimeStr} | Score ${sleepRecord.sleepScore} | ${sleepRecord.sleepDurationHours}hrs | ${category}`
+        `✅ Saved ${transformedData["Night of"].title[0].text.content}: ${duration}hrs | ${efficiency}% efficiency | ${calendar}`
       );
     } catch (error) {
       console.error(
@@ -163,8 +126,11 @@ async function main() {
   }
 
   console.log(
-    `\n✅ Successfully saved ${savedCount}/${weekSleepSessions.length} sleep sessions to Notion!`
+    `\n✅ Successfully saved ${savedCount} sleep sessions to Notion!`
   );
+  if (skippedCount > 0) {
+    console.log(`ℹ️  Skipped ${skippedCount} sessions outside the target week`);
+  }
   console.log(
     "🎯 Next: Run create-calendar-events.js to add them to your calendar"
   );
