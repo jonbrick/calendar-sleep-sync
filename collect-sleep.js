@@ -24,6 +24,18 @@ function askQuestion(question) {
   });
 }
 
+function calculateSleepDate(bedtimeStart) {
+  const bedtime = new Date(bedtimeStart);
+  const sleepDate = new Date(bedtimeStart);
+
+  // If bedtime is before 6 AM, this sleep belongs to the previous day
+  if (bedtime.getHours() < 6) {
+    sleepDate.setDate(sleepDate.getDate() - 1);
+  }
+
+  return sleepDate.toISOString().split("T")[0]; // Return YYYY-MM-DD format
+}
+
 async function main() {
   console.log("😴 Oura Sleep Collector 2025\n");
 
@@ -67,7 +79,10 @@ async function main() {
 
   // Convert dates to YYYY-MM-DD format for Oura API
   const startDate = weekStart.toISOString().split("T")[0];
-  const endDate = weekEnd.toISOString().split("T")[0];
+  // Add one day to end date to catch late Saturday night sessions
+  const extendedEnd = new Date(weekEnd);
+  extendedEnd.setDate(extendedEnd.getDate() + 1);
+  const endDate = extendedEnd.toISOString().split("T")[0];
 
   // Fetch both sleep sessions and daily sleep data
   console.log("🔄 Fetching sleep data from Oura...");
@@ -76,7 +91,19 @@ async function main() {
     oura.getDailySleep(startDate, endDate),
   ]);
 
-  if (sleepSessions.length === 0) {
+  // Filter for only long sleep sessions (main nighttime sleep)
+  const longSleepSessions = sleepSessions.filter(
+    (session) => session.type === "long_sleep"
+  );
+
+  // Further filter to only include sessions that belong to this week
+  const weekSleepSessions = longSleepSessions.filter((session) => {
+    const calculatedSleepDate = calculateSleepDate(session.bedtime_start);
+    const sleepDateObj = new Date(calculatedSleepDate);
+    return sleepDateObj >= weekStart && sleepDateObj <= weekEnd;
+  });
+
+  if (weekSleepSessions.length === 0) {
     console.log("📭 No sleep sessions found for this week");
     return;
   }
@@ -85,21 +112,27 @@ async function main() {
   const scoreMap = {};
   dailySleep.forEach((d) => (scoreMap[d.day] = d.score));
 
-  console.log("\n😴 Processing sleep sessions:");
+  console.log(
+    `\n😴 Processing ${weekSleepSessions.length} sleep sessions for week ${weekNumber}:`
+  );
   let savedCount = 0;
 
-  for (const session of sleepSessions) {
+  for (const session of weekSleepSessions) {
     try {
+      // Calculate which day this sleep belongs to
+      const calculatedSleepDate = calculateSleepDate(session.bedtime_start);
+
       // Determine wake category based on wake time
       const wakeTime = new Date(session.bedtime_end);
       const wakeHour = wakeTime.getHours();
-      const wakeCategory = wakeHour < 7 ? "Normal Wake Up" : "Sleep In";
+      const wakeCategory = wakeHour < 7 ? "Early Bird" : "Sleep In";
 
       // Combine session data with score
       const sleepRecord = {
         ...session,
         sleepScore: scoreMap[session.day] || null,
         wakeCategory: wakeCategory,
+        calculatedSleepDate: calculatedSleepDate,
         // Add calculated fields
         sleepDurationHours: (session.total_sleep_duration / 3600).toFixed(1),
         // Convert timestamps to readable format
@@ -111,9 +144,15 @@ async function main() {
       savedCount++;
 
       const category =
-        wakeCategory === "Normal Wake Up" ? "☀️ Normal Wake Up" : "🛌 Sleep In";
+        wakeCategory === "Early Bird" ? "☀️ Early Bird" : "🛌 Sleep In";
+      const bedtime = new Date(session.bedtime_start);
+      const bedtimeStr = bedtime.toLocaleString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
       console.log(
-        `✅ Saved ${session.day}: Score ${sleepRecord.sleepScore} | ${sleepRecord.sleepDurationHours}hrs | ${category}`
+        `✅ Saved ${calculatedSleepDate}: Bed ${bedtimeStr} | Score ${sleepRecord.sleepScore} | ${sleepRecord.sleepDurationHours}hrs | ${category}`
       );
     } catch (error) {
       console.error(
@@ -124,7 +163,7 @@ async function main() {
   }
 
   console.log(
-    `\n✅ Successfully saved ${savedCount}/${sleepSessions.length} sleep sessions to Notion!`
+    `\n✅ Successfully saved ${savedCount}/${weekSleepSessions.length} sleep sessions to Notion!`
   );
   console.log(
     "🎯 Next: Run create-calendar-events.js to add them to your calendar"

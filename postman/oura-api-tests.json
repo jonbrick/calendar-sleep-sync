@@ -1,0 +1,95 @@
+{
+  "info": {
+    "name": "Oura Sleep Tracker API Tests",
+    "description": "Test Oura API endpoints to understand sleep data structure",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "oura_access_token",
+      "value": "AWLKDAPSLDZAS2IGAP4PDUUF4QDRDNVJ",
+      "type": "string"
+    },
+    {
+      "key": "base_url",
+      "value": "https://api.ouraring.com/v2",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Test Authentication",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{oura_access_token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/usercollection/personal_info",
+          "host": ["{{base_url}}"],
+          "path": ["usercollection", "personal_info"]
+        }
+      }
+    },
+    {
+      "name": "Get Sleep Sessions Last Week",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{oura_access_token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/usercollection/sleep?start_date=2025-06-15&end_date=2025-06-22",
+          "host": ["{{base_url}}"],
+          "path": ["usercollection", "sleep"],
+          "query": [
+            {
+              "key": "start_date",
+              "value": "2025-06-15"
+            },
+            {
+              "key": "end_date",
+              "value": "2025-06-22"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Daily Sleep Summaries",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{oura_access_token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/usercollection/daily_sleep?start_date=2025-06-15&end_date=2025-06-22",
+          "host": ["{{base_url}}"],
+          "path": ["usercollection", "daily_sleep"],
+          "query": [
+            {
+              "key": "start_date",
+              "value": "2025-06-15"
+            },
+            {
+              "key": "end_date",
+              "value": "2025-06-22"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
