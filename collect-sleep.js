@@ -1,4 +1,4 @@
-const StravaClient = require("./lib/strava-client.js");
+const OuraClient = require("./lib/oura-client.js");
 const NotionClient = require("./lib/notion-client.js");
 const {
   getWeekBoundaries,
@@ -7,7 +7,7 @@ const {
 const readline = require("readline");
 
 // Create clients
-const strava = new StravaClient();
+const oura = new OuraClient();
 const notion = new NotionClient();
 
 // Create readline interface
@@ -25,14 +25,14 @@ function askQuestion(question) {
 }
 
 async function main() {
-  console.log("🏃‍♂️ Strava Workout Collector 2025\n");
+  console.log("😴 Oura Sleep Collector 2025\n");
 
   // Test connections
   console.log("Testing connections...");
-  const stravaOk = await strava.testConnection();
+  const ouraOk = await oura.testConnection();
   const notionOk = await notion.testConnection();
 
-  if (!stravaOk || !notionOk) {
+  if (!ouraOk || !notionOk) {
     console.log("❌ Connection failed. Please check your .env file.");
     process.exit(1);
   }
@@ -58,35 +58,73 @@ async function main() {
   }
 
   const { weekStart, weekEnd } = getWeekBoundaries(2025, weekNumber);
-  console.log(`\n📊 Collecting workouts for Week ${weekNumber}`);
+  console.log(`\n📊 Collecting sleep data for Week ${weekNumber}`);
   console.log(
     `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
   );
 
   rl.close();
 
-  // Fetch workouts from Strava
-  const activities = await strava.getActivities(weekStart, weekEnd);
+  // Convert dates to YYYY-MM-DD format for Oura API
+  const startDate = weekStart.toISOString().split("T")[0];
+  const endDate = weekEnd.toISOString().split("T")[0];
 
-  if (activities.length === 0) {
-    console.log("📭 No activities found for this week");
+  // Fetch both sleep sessions and daily sleep data
+  console.log("🔄 Fetching sleep data from Oura...");
+  const [sleepSessions, dailySleep] = await Promise.all([
+    oura.getSleepSessions(startDate, endDate),
+    oura.getDailySleep(startDate, endDate),
+  ]);
+
+  if (sleepSessions.length === 0) {
+    console.log("📭 No sleep sessions found for this week");
     return;
   }
 
-  console.log("\n🏃‍♂️ Processing activities:");
+  // Create a map of sleep scores by day
+  const scoreMap = {};
+  dailySleep.forEach((d) => (scoreMap[d.day] = d.score));
+
+  console.log("\n😴 Processing sleep sessions:");
   let savedCount = 0;
 
-  for (const activity of activities) {
+  for (const session of sleepSessions) {
     try {
-      await notion.createWorkoutRecord(activity);
+      // Determine wake category based on wake time
+      const wakeTime = new Date(session.bedtime_end);
+      const wakeHour = wakeTime.getHours();
+      const wakeCategory = wakeHour < 7 ? "Normal Wake Up" : "Sleep In";
+
+      // Combine session data with score
+      const sleepRecord = {
+        ...session,
+        sleepScore: scoreMap[session.day] || null,
+        wakeCategory: wakeCategory,
+        // Add calculated fields
+        sleepDurationHours: (session.total_sleep_duration / 3600).toFixed(1),
+        // Convert timestamps to readable format
+        bedtimeFormatted: new Date(session.bedtime_start).toLocaleString(),
+        wakeTimeFormatted: new Date(session.bedtime_end).toLocaleString(),
+      };
+
+      await notion.createSleepRecord(sleepRecord);
       savedCount++;
+
+      const category =
+        wakeCategory === "Normal Wake Up" ? "☀️ Normal Wake Up" : "🛌 Sleep In";
+      console.log(
+        `✅ Saved ${session.day}: Score ${sleepRecord.sleepScore} | ${sleepRecord.sleepDurationHours}hrs | ${category}`
+      );
     } catch (error) {
-      console.error(`❌ Failed to save ${activity.name}:`, error.message);
+      console.error(
+        `❌ Failed to save sleep data for ${session.day}:`,
+        error.message
+      );
     }
   }
 
   console.log(
-    `\n✅ Successfully saved ${savedCount}/${activities.length} workouts to Notion!`
+    `\n✅ Successfully saved ${savedCount}/${sleepSessions.length} sleep sessions to Notion!`
   );
   console.log(
     "🎯 Next: Run create-calendar-events.js to add them to your calendar"
