@@ -25,7 +25,7 @@ function askQuestion(question) {
 }
 
 async function main() {
-  console.log("🗓️ Calendar Event Creator 2025\n");
+  console.log("🗓️ Sleep Calendar Event Creator 2025\n");
 
   // Test connections
   console.log("Testing connections...");
@@ -65,37 +65,37 @@ async function main() {
     `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
   );
 
-  // Get workouts from Notion
-  const workouts = await notion.getWorkoutsForWeek(weekStart, weekEnd);
+  // Get sleep records from Notion that don't have calendar events yet
+  const sleepRecords = await notion.getSleepForWeek(weekStart, weekEnd);
 
-  if (workouts.length === 0) {
-    console.log("📭 No workouts found without calendar events for this week");
+  if (sleepRecords.length === 0) {
     console.log(
-      "💡 Try running collect-workouts.js first to gather workout data"
+      "📭 No sleep records found without calendar events for this week"
     );
+    console.log("💡 Try running collect-sleep.js first to gather sleep data");
     return;
   }
 
   console.log("\n🗓️ Creating calendar events:");
   let createdCount = 0;
 
-  for (const workout of workouts) {
+  for (const sleepRecord of sleepRecords) {
     try {
-      await calendar.createWorkoutEvent(workout);
-      await notion.markCalendarCreated(workout.id);
+      await calendar.createSleepEvent(sleepRecord);
+      await notion.markCalendarCreated(sleepRecord.id);
       createdCount++;
     } catch (error) {
       console.error(
-        `❌ Failed to create calendar event for ${workout.activityName}:`,
+        `❌ Failed to create calendar event for ${sleepRecord.nightOf}:`,
         error.message
       );
     }
   }
 
   console.log(
-    `\n✅ Successfully created ${createdCount}/${workouts.length} calendar events!`
+    `\n✅ Successfully created ${createdCount}/${sleepRecords.length} calendar events!`
   );
-  console.log("🎯 Check your fitness calendar to see the workouts!");
+  console.log("🎯 Check your sleep calendars to see the events!");
 }
 
 main().catch(console.error);
