@@ -3,6 +3,8 @@ const NotionClient = require("./lib/notion-client.js");
 const {
   getWeekBoundaries,
   generateWeekOptions,
+  parseDateDDMMYY,
+  getWeekBoundariesForDate,
 } = require("./lib/week-utils.js");
 const readline = require("readline");
 
@@ -37,31 +39,92 @@ async function main() {
     process.exit(1);
   }
 
-  console.log("\n📅 Available weeks:");
-  const weeks = generateWeekOptions(2025);
+  // Ask user for selection method
+  console.log("\n📅 Choose your selection method:");
+  console.log("  1. Select by week number (current behavior)");
+  console.log("  2. Enter a specific date (DD-MM-YY format)");
 
-  // Show first few weeks as examples
-  weeks.slice(0, 5).forEach((week) => {
-    console.log(`  ${week.value} - ${week.label}`);
-  });
-  console.log("  ...");
-  console.log(`  52 - ${weeks[51].label}\n`);
+  const selectionMethod = await askQuestion("? Choose option (1 or 2): ");
 
-  const weekInput = await askQuestion(
-    "? Which week to collect? (enter week number): "
-  );
-  const weekNumber = parseInt(weekInput);
+  let weekStart, weekEnd;
 
-  if (weekNumber < 1 || weekNumber > 52) {
-    console.log("❌ Invalid week number");
+  if (selectionMethod === "1") {
+    // Week-based selection (current behavior)
+    console.log("\n📅 Available weeks:");
+    const weeks = generateWeekOptions(2025);
+
+    // Show first few weeks as examples
+    weeks.slice(0, 5).forEach((week) => {
+      console.log(`  ${week.value} - ${week.label}`);
+    });
+    console.log("  ...");
+    console.log(`  52 - ${weeks[51].label}\n`);
+
+    const weekInput = await askQuestion(
+      "? Which week to collect? (enter week number): "
+    );
+    const weekNumber = parseInt(weekInput);
+
+    if (weekNumber < 1 || weekNumber > 52) {
+      console.log("❌ Invalid week number");
+      process.exit(1);
+    }
+
+    const boundaries = getWeekBoundaries(2025, weekNumber);
+    weekStart = boundaries.weekStart;
+    weekEnd = boundaries.weekEnd;
+
+    console.log(`\n📊 Collecting sleep data for Week ${weekNumber}`);
+    console.log(
+      `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
+    );
+  } else if (selectionMethod === "2") {
+    // Date-based selection
+    const dateInput = await askQuestion(
+      "? Enter date in DD-MM-YY format (e.g., 15-03-25): "
+    );
+
+    try {
+      const selectedDate = parseDateDDMMYY(dateInput);
+      const boundaries = getWeekBoundariesForDate(selectedDate);
+      weekStart = boundaries.weekStart;
+      weekEnd = boundaries.weekEnd;
+
+      console.log(
+        `\n📊 Collecting sleep data for the week containing ${selectedDate.toDateString()}`
+      );
+      console.log(
+        `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
+      );
+    } catch (error) {
+      console.log(`❌ ${error.message}`);
+      process.exit(1);
+    }
+  } else {
+    console.log("❌ Invalid option. Please choose 1 or 2.");
     process.exit(1);
   }
 
-  const { weekStart, weekEnd } = getWeekBoundaries(2025, weekNumber);
-  console.log(`\n📊 Collecting sleep data for Week ${weekNumber}`);
+  // Confirmation step
+  console.log("\n📋 Summary:");
   console.log(
-    `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
+    `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}`
   );
+  console.log(
+    `📊 Total days: ${Math.ceil(
+      (weekEnd - weekStart) / (1000 * 60 * 60 * 24)
+    )} days`
+  );
+
+  const confirm = await askQuestion(
+    "\n? Proceed with collecting sleep data for this week? (y/n): "
+  );
+
+  if (confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
+    console.log("❌ Operation cancelled.");
+    rl.close();
+    return;
+  }
 
   rl.close();
 
