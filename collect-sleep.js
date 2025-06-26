@@ -4,7 +4,7 @@ const {
   getWeekBoundaries,
   generateWeekOptions,
   parseDateDDMMYY,
-  getWeekBoundariesForDate,
+  getSingleDayBoundaries,
 } = require("./lib/week-utils.js");
 const readline = require("readline");
 
@@ -41,14 +41,43 @@ async function main() {
 
   // Ask user for selection method
   console.log("\n📅 Choose your selection method:");
-  console.log("  1. Select by week number (current behavior)");
-  console.log("  2. Enter a specific date (DD-MM-YY format)");
+  console.log("  1. Enter a specific Night of Date (DD-MM-YY format)");
+  console.log("  2. Select by week number (current behavior)");
 
   const selectionMethod = await askQuestion("? Choose option (1 or 2): ");
 
   let weekStart, weekEnd;
 
   if (selectionMethod === "1") {
+    // Date-based selection
+    const dateInput = await askQuestion(
+      "? Enter Night of Date in DD-MM-YY format (e.g., 15-03-25): "
+    );
+
+    try {
+      const selectedDate = parseDateDDMMYY(dateInput);
+      const boundaries = getSingleDayBoundaries(selectedDate);
+      weekStart = boundaries.dayStart;
+      weekEnd = boundaries.dayEnd;
+
+      // Calculate the corresponding Oura date (Night of + 1)
+      const ouraDate = new Date(selectedDate);
+      ouraDate.setDate(ouraDate.getDate() + 1);
+
+      console.log(
+        `\n📊 Collecting sleep data for Night of ${selectedDate.toDateString()}`
+      );
+      console.log(`🌙 Night of Date: ${selectedDate.toDateString()}`);
+      console.log(
+        `📱 Oura Date: ${ouraDate.toDateString()} (${
+          ouraDate.toISOString().split("T")[0]
+        })\n`
+      );
+    } catch (error) {
+      console.log(`❌ ${error.message}`);
+      process.exit(1);
+    }
+  } else if (selectionMethod === "2") {
     // Week-based selection (current behavior)
     console.log("\n📅 Available weeks:");
     const weeks = generateWeekOptions(2025);
@@ -78,28 +107,6 @@ async function main() {
     console.log(
       `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
     );
-  } else if (selectionMethod === "2") {
-    // Date-based selection
-    const dateInput = await askQuestion(
-      "? Enter date in DD-MM-YY format (e.g., 15-03-25): "
-    );
-
-    try {
-      const selectedDate = parseDateDDMMYY(dateInput);
-      const boundaries = getWeekBoundariesForDate(selectedDate);
-      weekStart = boundaries.weekStart;
-      weekEnd = boundaries.weekEnd;
-
-      console.log(
-        `\n📊 Collecting sleep data for the week containing ${selectedDate.toDateString()}`
-      );
-      console.log(
-        `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
-      );
-    } catch (error) {
-      console.log(`❌ ${error.message}`);
-      process.exit(1);
-    }
   } else {
     console.log("❌ Invalid option. Please choose 1 or 2.");
     process.exit(1);
@@ -107,17 +114,32 @@ async function main() {
 
   // Confirmation step
   console.log("\n📋 Summary:");
-  console.log(
-    `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}`
-  );
-  console.log(
-    `📊 Total days: ${Math.ceil(
-      (weekEnd - weekStart) / (1000 * 60 * 60 * 24)
-    )} days`
-  );
+
+  if (selectionMethod === "1") {
+    console.log(`📊 Single day operation`);
+    console.log(`🌙 Night of Date: ${weekStart.toDateString()}`);
+
+    // Calculate and show Oura date for single day
+    const ouraDate = new Date(weekStart);
+    ouraDate.setDate(ouraDate.getDate() + 1);
+    console.log(
+      `📱 Oura Date: ${ouraDate.toDateString()} (${
+        ouraDate.toISOString().split("T")[0]
+      })`
+    );
+  } else {
+    console.log(
+      `📊 Total days: ${Math.ceil(
+        (weekEnd - weekStart) / (1000 * 60 * 60 * 24)
+      )} days`
+    );
+    console.log(
+      `📅 Night of Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}`
+    );
+  }
 
   const confirm = await askQuestion(
-    "\n? Proceed with collecting sleep data for this week? (y/n): "
+    "\n? Proceed with collecting sleep data for this period? (y/n): "
   );
 
   if (confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
@@ -129,7 +151,8 @@ async function main() {
   rl.close();
 
   // Fetch Oura dates for Night of dates
-  // Week 25 nights (June 15-21) = Oura dates (June 16-22)
+  // For single day: Night of date = Oura date + 1
+  // For week: Week nights (June 15-21) = Oura dates (June 16-22)
   const fetchStart = new Date(weekStart);
   fetchStart.setDate(fetchStart.getDate() + 1); // Oura day = Night of + 1
   const fetchEnd = new Date(weekEnd);
