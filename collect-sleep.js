@@ -47,6 +47,7 @@ async function main() {
   const selectionMethod = await askQuestion("? Choose option (1 or 2): ");
 
   let weekStart, weekEnd;
+  let selectedWeekNumber;
 
   if (selectionMethod === "1") {
     // Date-based selection
@@ -99,13 +100,23 @@ async function main() {
       process.exit(1);
     }
 
+    selectedWeekNumber = weekNumber;
     const boundaries = getWeekBoundaries(2025, weekNumber);
     weekStart = boundaries.weekStart;
     weekEnd = boundaries.weekEnd;
 
-    console.log(`\n📊 Collecting sleep data for Week ${weekNumber}`);
+    console.log(`\n📊 Week ${weekNumber} Selected`);
     console.log(
-      `📅 Date range: ${weekStart.toDateString()} - ${weekEnd.toDateString()}\n`
+      `🌙 Night of Dates: ${weekStart.toDateString()} - ${weekEnd.toDateString()} (the nights you went to sleep)`
+    );
+
+    // Calculate and show Oura dates
+    const ouraStart = new Date(weekStart);
+    ouraStart.setDate(ouraStart.getDate() + 1);
+    const ouraEnd = new Date(weekEnd);
+    ouraEnd.setDate(ouraEnd.getDate() + 1);
+    console.log(
+      `☀️ Oura API Dates: ${ouraStart.toDateString()} - ${ouraEnd.toDateString()} (the mornings you woke up)\n`
     );
   } else {
     console.log("❌ Invalid option. Please choose 1 or 2.");
@@ -156,14 +167,18 @@ async function main() {
   const fetchStart = new Date(weekStart);
   fetchStart.setDate(fetchStart.getDate() + 1); // Oura day = Night of + 1
   const fetchEnd = new Date(weekEnd);
-  fetchEnd.setDate(fetchEnd.getDate() + 2); // End + 1 for Oura day + 1 buffer
+  fetchEnd.setDate(fetchEnd.getDate() + 1); // End + 1 for Oura day + 1 buffer
 
   // Convert dates to YYYY-MM-DD format for Oura API
   const startDate = fetchStart.toISOString().split("T")[0];
   const endDate = fetchEnd.toISOString().split("T")[0];
 
+  console.log(`\n🔄 Fetching from Oura API...`);
+  console.log(`   Querying dates: ${startDate} to ${endDate}`);
   console.log(
-    `🔄 Fetching Oura dates ${startDate} to ${endDate} for Night of ${weekStart.toDateString()} - ${weekEnd.toDateString()}`
+    `   To get nights: ${weekStart.toISOString().split("T")[0]} to ${
+      weekEnd.toISOString().split("T")[0]
+    }\n`
   );
 
   // Fetch sleep sessions from Oura
@@ -185,7 +200,7 @@ async function main() {
 
       // We already fetched the right Oura dates, so process all sessions
       console.log(
-        `✅ Processing Night of ${transformedData["Night of"].title[0].text.content} from Oura Date ${session.day}`
+        `   Oura: ${session.day} → Night of: ${transformedData["Night of Date"].date.start} ✓`
       );
 
       await notion.createSleepRecord(session);
@@ -212,9 +227,15 @@ async function main() {
   if (skippedCount > 0) {
     console.log(`ℹ️  Skipped ${skippedCount} sessions outside the target week`);
   }
-  console.log(
-    "🎯 Next: Run create-calendar-events.js to add them to your calendar"
-  );
+
+  // Show summary of what was processed
+  if (selectionMethod === "2") {
+    console.log(
+      `📅 Week ${selectedWeekNumber}: ${weekStart.toDateString()} - ${weekEnd.toDateString()}`
+    );
+  } else {
+    console.log(`📅 Date: ${weekStart.toDateString()}`);
+  }
 }
 
 main().catch(console.error);
