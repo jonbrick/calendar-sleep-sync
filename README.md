@@ -263,13 +263,10 @@ Weeks run Sunday through Saturday with Week 1 starting on the Sunday before Janu
 node -e "const OuraClient = require('./lib/oura-client.js'); const client = new OuraClient(); client.testConnection();"
 
 # Test Notion connection
-node -e "const NotionClient = require('./lib/notion-client.js'); const client = new NotionClient(); client.testConnection();"
-
-# Test Google Calendar connection
-node -e "const CalendarClient = require('./lib/calendar-client.js'); const client = new CalendarClient(); client.testConnection();"
+node -e "const NotionClient = require('./lib/oura-notion-client.js'); const client = new NotionClient(); client.testConnection();"
 
 # Test week calculations
-node -e "const { getWeekBoundaries } = require('./lib/week-utils.js'); console.log('Week 25:', getWeekBoundaries(2025, 25));"
+node -e "const { getWeekBoundaries } = require('./lib/oura-week-utils.js'); console.log('Week 25:', getWeekBoundaries(2025, 25));"
 ```
 
 ### API Testing with Postman

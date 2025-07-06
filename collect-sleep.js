@@ -1,11 +1,11 @@
 const OuraClient = require("./lib/oura-client.js");
-const NotionClient = require("./lib/notion-client.js");
+const NotionClient = require("./lib/oura-notion-client.js");
 const {
   getWeekBoundaries,
   generateWeekOptions,
   parseDateDDMMYY,
   getSingleDayBoundaries,
-} = require("./lib/week-utils.js");
+} = require("./lib/oura-week-utils.js");
 const readline = require("readline");
 
 // Create clients
